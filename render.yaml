@@ -1,0 +1,53 @@
+# ─── Render.com — Deploy config ────────────────────────────────────────────
+# Docs: https://render.com/docs/infrastructure-as-code
+#
+# COMO USAR:
+#   1. Suba o projeto para um repositório GitHub
+#   2. Em render.com → New → Blueprint → aponte para o repo
+#   3. Configure as variáveis marcadas com sync: false no painel do Render
+#   4. Deploy!
+
+services:
+  - type: web
+    name: esporte-insight
+    runtime: python
+    plan: starter          # $7/mês — sem spin-down (recomendado para Copa)
+    # plan: free           # Grátis — hiberna após 15min de inatividade
+
+    buildCommand: pip install -r requirements.txt gunicorn
+
+    startCommand: >
+      gunicorn wsgi:app
+      --bind 0.0.0.0:$PORT
+      --workers 2
+      --threads 2
+      --timeout 90
+      --access-logfile -
+      --error-logfile -
+
+    healthCheckPath: /api/quota
+
+    # Disco persistente para o SQLite (não perde dados entre deploys)
+    disk:
+      name: esporte-insight-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+
+    envVars:
+      # ── Obrigatórias — defina no painel do Render ──────────────────────
+      - key: ODDS_API_KEY
+        sync: false          # Cole sua chave da the-odds-api.com
+
+      - key: SECRET_KEY
+        generateValue: true  # Gerada automaticamente pelo Render
+
+      # ── Telegram Bot (opcional — deixe vazio se não usar) ───────────────
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+
+      # ── Configurações de ambiente ───────────────────────────────────────
+      - key: FLASK_ENV
+        value: production
+
+      - key: PYTHONUNBUFFERED
+        value: "1"

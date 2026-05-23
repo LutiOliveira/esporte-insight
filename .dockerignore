@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+data/copa.db
+data/telegram_subscribers.json
+.claude/
+*.md
+.git/
+.gitignore

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Esporte Insight — Projeções e Odds</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">⚽ Esporte <span>Insight</span></div>
+  <div class="header-actions">
+    <span id="accuracy-status"></span>
+    <span id="quota-status"></span>
+    <span class="last-update" id="last-update">—</span>
+    <button class="btn-refresh" id="btn-refresh" onclick="refresh()">Atualizar dados</button>
+  </div>
+</header>
+
+<main>
+  <!-- Barra jogos ao vivo -->
+  <div class="live-bar" id="live-bar">
+    <div class="live-bar-title"><span class="live-dot"></span> AO VIVO AGORA</div>
+    <div class="live-games-list" id="live-games-list"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('jogos')"       id="tab-jogos">Jogos</button>
+    <button class="nav-tab"        onclick="switchTab('grupos')"      id="tab-grupos">Grupos</button>
+    <button class="nav-tab"        onclick="switchTab('chaveamento')" id="tab-chaveamento">Chaveamento</button>
+    <button class="nav-tab"        onclick="switchTab('valor')"       id="tab-valor">💎 Apostas de Valor</button>
+    <button class="nav-tab"        onclick="switchTab('simulador')"   id="tab-simulador">🎮 Simulador</button>
+  </div>
+
+  <!-- Filtros (só na aba Jogos) -->
+  <div class="filters" id="filters"></div>
+
+  <!-- Aba: Jogos -->
+  <div id="view-jogos">
+    <div class="games-grid" id="games">
+      <div class="loading"><span class="spinner"></span> Carregando...</div>
+    </div>
+  </div>
+
+  <!-- Aba: Grupos -->
+  <div id="view-grupos" style="display:none">
+    <div class="groups-grid" id="groups">
+      <div class="loading"><span class="spinner"></span> Carregando grupos...</div>
+    </div>
+  </div>
+
+  <!-- Aba: Chaveamento -->
+  <div id="view-chaveamento" style="display:none">
+    <div id="bracket">
+      <div class="loading"><span class="spinner"></span> Carregando chaveamento...</div>
+    </div>
+  </div>
+
+  <!-- Aba: Apostas de Valor -->
+  <div id="view-valor" style="display:none">
+    <!-- CTA Telegram -->
+    <div class="telegram-cta">
+      <div class="telegram-cta-text">
+        <h3>📲 Receba alertas de value bets no Telegram</h3>
+        <p>Seja notificado instantaneamente quando uma aposta de valor for detectada — antes que as odds mudem.</p>
+      </div>
+      <a href="https://t.me/EsporteInsightBot" target="_blank" class="btn-telegram">
+        ✈️ Seguir canal
+      </a>
+    </div>
+
+    <div id="value-bets-list">
+      <div class="loading"><span class="spinner"></span> Analisando apostas...</div>
+    </div>
+  </div>
+
+  <!-- Aba: Simulador -->
+  <div id="view-simulador" style="display:none">
+    <div id="simulator-content"></div>
+  </div>
+</main>
+
+<!-- Container de toasts de gol -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

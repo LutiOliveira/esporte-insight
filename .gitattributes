@@ -1,0 +1,17 @@
+# Normaliza line endings — Windows cria CRLF, servidor Linux espera LF
+* text=auto
+
+# Arquivos que DEVEM ser LF no servidor
+*.py    text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.js    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+
+# Binários — não tocar nos line endings
+*.db    binary
+*.pyc   binary
