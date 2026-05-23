@@ -1,3 +1,59 @@
+// ─── FLAGS ────────────────────────────────────────────────────────
+const FLAGS = {
+  "Mexico": "🇲🇽",
+  "South Africa": "🇿🇦",
+  "Jamaica": "🇯🇲",
+  "Honduras": "🇭🇳",
+  "USA": "🇺🇸",
+  "Panama": "🇵🇦",
+  "Ecuador": "🇪🇨",
+  "New Zealand": "🇳🇿",
+  "Canada": "🇨🇦",
+  "Morocco": "🇲🇦",
+  "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  "Haiti": "🇭🇹",
+  "Brazil": "🇧🇷",
+  "Algeria": "🇩🇿",
+  "Ivory Coast": "🇨🇮",
+  "DR Congo": "🇨🇩",
+  "Argentina": "🇦🇷",
+  "Chile": "🇨🇱",
+  "Japan": "🇯🇵",
+  "Norway": "🇳🇴",
+  "Spain": "🇪🇸",
+  "Portugal": "🇵🇹",
+  "Uruguay": "🇺🇾",
+  "Turkey": "🇹🇷",
+  "France": "🇫🇷",
+  "Netherlands": "🇳🇱",
+  "Colombia": "🇨🇴",
+  "Australia": "🇦🇺",
+  "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+  "Switzerland": "🇨🇭",
+  "Paraguay": "🇵🇾",
+  "Iran": "🇮🇷",
+  "Germany": "🇩🇪",
+  "Belgium": "🇧🇪",
+  "South Korea": "🇰🇷",
+  "Sweden": "🇸🇪",
+  "Qatar": "🇶🇦",
+  "Croatia": "🇭🇷",
+  "Saudi Arabia": "🇸🇦",
+  "Tunisia": "🇹🇳",
+  "Ghana": "🇬🇭",
+  "Senegal": "🇸🇳",
+  "Egypt": "🇪🇬",
+  "Cape Verde": "🇨🇻",
+  "Austria": "🇦🇹",
+  "Bosnia & Herzegovina": "🇧🇦",
+  "Czech Republic": "🇨🇿",
+  "Uzbekistan": "🇺🇿",
+};
+
+function flag(team) {
+  return FLAGS[team] || "";
+}
+
 // ─── Estado global ────────────────────────────────────────────────
 const state = {
   games: [], liveGames: [], liveScores: {},
@@ -6,7 +62,12 @@ const state = {
   activeTournament: null, activeTab: "jogos",
   livePollingInterval: null,
   notificationsEnabled: false,
+  ranking: [],
+  topEdgeGameId: null,
 };
+
+// Set de jogos já notificados (15min antes)
+const notifiedGames = new Set();
 
 // ─── API ──────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
@@ -23,6 +84,22 @@ function formatDateTime(iso) {
   });
 }
 function bestOdd(odds, field) { return Math.max(...odds.map(o => o[field])); }
+
+// ─── TEMA ─────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle("light");
+  document.getElementById("btn-theme").textContent = isLight ? "☀️" : "🌙";
+  localStorage.setItem("esporte_theme", isLight ? "light" : "dark");
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("esporte_theme");
+  if (saved === "light") {
+    document.documentElement.classList.add("light");
+    const btn = document.getElementById("btn-theme");
+    if (btn) btn.textContent = "☀️";
+  }
+}
 
 // ─── NOTIFICAÇÕES ─────────────────────────────────────────────────
 async function requestNotifications() {
@@ -47,7 +124,7 @@ function detectGoals(newLive) {
     const prev = state.liveScores[game.id];
     const h = game.home_score ?? 0, a = game.away_score ?? 0;
     if (prev && (h > prev.home || a > prev.away)) {
-      showToast("⚽ GOL!", `${game.home_team} ${h} – ${a} ${game.away_team}`, "toast-goal");
+      showToast("⚽ GOL!", `${flag(game.home_team)}${game.home_team} ${h} – ${a} ${game.away_team}${flag(game.away_team)}`, "toast-goal");
       if (state.notificationsEnabled)
         new Notification(`⚽ GOL!`, { body: `${game.home_team} ${h} – ${a} ${game.away_team}` });
     }
@@ -55,18 +132,45 @@ function detectGoals(newLive) {
   }
 }
 
+// ─── NOTIFICAÇÃO 15 MIN ANTES ─────────────────────────────────────
+function checkUpcomingGameNotifications(games) {
+  const now = Date.now();
+  const in16min = now + 16 * 60 * 1000;
+  const in14min = now + 14 * 60 * 1000;
+
+  for (const game of games) {
+    if (game.status !== "upcoming") continue;
+    const startMs = new Date(game.start_time).getTime();
+    if (notifiedGames.has(game.id)) continue;
+    if (startMs >= in14min && startMs <= in16min) {
+      notifiedGames.add(game.id);
+      const hf = flag(game.home_team);
+      const af = flag(game.away_team);
+      showToast("⏰ Vai começar!", `${hf}${game.home_team} vs ${game.away_team}${af} — em 15 min`, "");
+      if (state.notificationsEnabled) {
+        new Notification("⏰ Vai começar!", {
+          body: `${game.home_team} vs ${game.away_team} — em 15 min`,
+        });
+      }
+    }
+  }
+}
+
 // ─── TABS ─────────────────────────────────────────────────────────
+const ALL_TABS = ["jogos", "grupos", "chaveamento", "valor", "simulador", "ranking"];
+
 function switchTab(tab) {
   state.activeTab = tab;
-  ["jogos", "grupos", "chaveamento", "valor", "simulador"].forEach(t => {
+  ALL_TABS.forEach(t => {
     document.getElementById(`view-${t}`).style.display = t === tab ? "" : "none";
     document.getElementById(`tab-${t}`)?.classList.toggle("active", t === tab);
   });
   document.getElementById("filters").style.display = tab === "jogos" ? "" : "none";
   if (tab === "grupos") renderGroups();
   if (tab === "chaveamento") renderBracket();
-  if (tab === "valor") renderValueBets();
+  if (tab === "valor") { renderValueBets(); loadTipDay(); }
   if (tab === "simulador") renderSimulator();
+  if (tab === "ranking") loadRanking();
 }
 
 // ─── BARRA AO VIVO ────────────────────────────────────────────────
@@ -77,12 +181,81 @@ function renderLiveBar() {
   bar.classList.add("visible");
   list.innerHTML = state.liveGames.map(g => `
     <div class="live-game-item">
-      <span class="live-game-teams">${g.home_team} vs ${g.away_team}</span>
+      <span class="live-game-teams">${flag(g.home_team)}${g.home_team} vs ${g.away_team}${flag(g.away_team)}</span>
       <span>
         <span class="live-game-score">${g.home_score ?? 0} – ${g.away_score ?? 0}</span>
         ${g.minute ? `<span class="live-game-min">${g.minute}'</span>` : ""}
       </span>
     </div>`).join("");
+}
+
+// ─── LIVE COUNT BADGE ─────────────────────────────────────────────
+function updateLiveTabBadge() {
+  const tab = document.getElementById("tab-jogos");
+  const count = state.liveGames.length;
+  // Remove old badge if any
+  const old = tab.querySelector(".live-count-badge");
+  if (old) old.remove();
+  if (count > 0) {
+    const badge = document.createElement("span");
+    badge.className = "live-count-badge";
+    badge.textContent = count;
+    tab.appendChild(badge);
+  }
+}
+
+// ─── COUNTDOWN ────────────────────────────────────────────────────
+let _countdownInterval = null;
+
+function renderCountdown() {
+  const container = document.getElementById("countdown-container");
+  if (!container) return;
+
+  const all = [...state.liveGames, ...state.games];
+  const upcoming = all.filter(g => g.status === "upcoming").sort((a, b) =>
+    new Date(a.start_time) - new Date(b.start_time)
+  );
+
+  if (!upcoming.length) {
+    container.innerHTML = "";
+    if (_countdownInterval) { clearInterval(_countdownInterval); _countdownInterval = null; }
+    return;
+  }
+
+  const next = upcoming[0];
+  const hf = flag(next.home_team);
+  const af = flag(next.away_team);
+
+  function tick() {
+    const now = Date.now();
+    const diff = new Date(next.start_time).getTime() - now;
+    if (diff <= 0) {
+      container.innerHTML = "";
+      if (_countdownInterval) { clearInterval(_countdownInterval); _countdownInterval = null; }
+      return;
+    }
+    const totalSec = Math.floor(diff / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0 || d > 0) parts.push(`${h}h`);
+    if (d === 0) parts.push(`${String(m).padStart(2,"0")}min`);
+    if (d === 0 && h === 0) parts.push(`${String(s).padStart(2,"0")}s`);
+    const timeStr = parts.join(" ");
+
+    container.innerHTML = `
+      <div class="countdown-banner">
+        ⚽ Próximo: ${hf}${next.home_team} vs ${af}${next.away_team}
+        — em <span class="countdown-time">${timeStr}</span>
+      </div>`;
+  }
+
+  tick();
+  if (_countdownInterval) clearInterval(_countdownInterval);
+  _countdownInterval = setInterval(tick, 1000);
 }
 
 // ─── JOGOS ────────────────────────────────────────────────────────
@@ -119,9 +292,9 @@ function renderOddsTable(game) {
       <table class="odds-table">
         <thead><tr>
           <th>Casa</th>
-          <th style="text-align:center">${game.home_team}</th>
+          <th style="text-align:center">${flag(game.home_team)}${game.home_team}</th>
           <th style="text-align:center">Empate</th>
-          <th style="text-align:center">${game.away_team}</th>
+          <th style="text-align:center">${flag(game.away_team)}${game.away_team}</th>
         </tr></thead>
         <tbody>${game.odds.map(o => `
           <tr>
@@ -149,7 +322,7 @@ function renderProjection(game) {
   if (!p) return "";
   return `
     <div class="prob-bar-wrapper">
-      <div class="prob-labels"><span>${game.home_team}</span><span>Empate</span><span>${game.away_team}</span></div>
+      <div class="prob-labels"><span>${flag(game.home_team)}${game.home_team}</span><span>Empate</span><span>${flag(game.away_team)}${game.away_team}</span></div>
       <div class="prob-values">
         <span class="prob-home">${p.home_win_prob}%</span>
         <span class="prob-draw">${p.draw_prob}%</span>
@@ -171,14 +344,18 @@ function renderGame(game) {
   const proj = game.projection;
   const isLive = game.status === "live";
   const hasValue = game.value_bets?.length > 0;
+  const isTopEdge = game.id === state.topEdgeGameId;
   const groupLabel = game.group_name ? `<span class="game-group">${game.group_name}</span>` : "";
   const valueBadge = hasValue ? `<span class="value-card-badge">💰 VALOR</span>` : "";
+  const topEdgeBadge = isTopEdge ? `<span class="top-edge-badge">🔥 TOP EDGE</span>` : "";
+  const hf = flag(game.home_team);
+  const af = flag(game.away_team);
 
   return `
     <div class="game-card" style="${isLive ? "border-color:rgba(248,81,73,.5);" : hasValue ? "border-color:rgba(63,185,80,.4);" : ""}">
       <div class="game-header">
         <div class="game-header-left">
-          <span class="game-tournament">${game.tournament} ${groupLabel}${valueBadge}</span>
+          <span class="game-tournament">${game.tournament} ${groupLabel}${valueBadge}${topEdgeBadge}</span>
         </div>
         <span class="game-time">${formatDateTime(game.start_time)}</span>
       </div>
@@ -196,18 +373,22 @@ function renderGame(game) {
         </div>` : ""}
       <div class="game-body">
         <div class="team home">
-          <div class="team-name">${game.home_team}</div>
+          <div class="team-name">${hf} ${game.home_team}</div>
           <div class="team-goals">${proj ? `${proj.home_goals_proj.toFixed(1)} gols esperados` : ""}</div>
         </div>
         <div class="vs">VS</div>
         <div class="team away">
-          <div class="team-name">${game.away_team}</div>
+          <div class="team-name">${game.away_team} ${af}</div>
           <div class="team-goals">${proj ? `${proj.away_goals_proj.toFixed(1)} gols esperados` : ""}</div>
         </div>
       </div>
       ${isLive ? "" : renderProjection(game)}
       ${renderValueBetSection(game.value_bets)}
       ${renderOddsTable(game)}
+      <div style="padding:4px 16px 8px;display:flex;gap:12px;flex-wrap:wrap;">
+        <a href="https://ge.globo.com/busca/?q=${encodeURIComponent(game.home_team)}" target="_blank" class="news-link">📰 Notícias sobre ${game.home_team} →</a>
+        <a href="https://ge.globo.com/busca/?q=${encodeURIComponent(game.away_team)}" target="_blank" class="news-link">📰 Notícias sobre ${game.away_team} →</a>
+      </div>
     </div>`;
 }
 
@@ -220,6 +401,36 @@ function renderValueBets() {
     return;
   }
   container.innerHTML = games.map(game => renderGame(game)).join("");
+}
+
+// ─── TIP DO DIA ───────────────────────────────────────────────────
+async function loadTipDay() {
+  const container = document.getElementById("tip-day-container");
+  if (!container) return;
+  try {
+    const tip = await apiFetch("/api/tips");
+    if (!tip || !tip.label) {
+      container.innerHTML = "";
+      return;
+    }
+    const hf = flag(tip.home_team);
+    const af = flag(tip.away_team);
+    container.innerHTML = `
+      <div class="tip-day-section">
+        <div>
+          <div class="tip-day-label">💡 Tip do Dia</div>
+          <div class="tip-day-game">${hf}${tip.home_team} vs ${af}${tip.away_team}</div>
+          <div class="tip-day-meta">${tip.label} · Casa: ${tip.bookmaker} · Modelo: ${tip.model_prob}% · Mercado: ${tip.implied_prob}%</div>
+        </div>
+        <div class="tip-day-odds">
+          <span class="tip-day-edge">+${tip.edge}% edge</span>
+          <span class="tip-day-odd">${tip.best_odd}</span>
+          <a class="bet-cta" href="${tip.affiliate_link}" target="_blank" rel="noopener">Apostar →</a>
+        </div>
+      </div>`;
+  } catch {
+    container.innerHTML = "";
+  }
 }
 
 // ─── SIMULADOR ────────────────────────────────────────────────────
@@ -318,7 +529,7 @@ function renderGroups() {
       return `
         <tr class="${isQ ? "qualified" : ""}">
           <td class="pos">${i + 1}</td>
-          <td><div class="team-cell">${t.live ? `<span class="team-live-dot"></span>` : ""}${t.team}</div></td>
+          <td><div class="team-cell">${t.live ? `<span class="team-live-dot"></span>` : ""}${flag(t.team)}${t.team}</div></td>
           <td>${t.P}</td><td>${t.W}</td><td>${t.D}</td><td>${t.L}</td>
           <td>${t.GF}</td><td>${t.GA}</td>
           <td>${t.GD > 0 ? "+" : ""}${t.GD}</td>
@@ -345,15 +556,17 @@ function renderBracket() {
       const isTbd = game.home_team === "A definir";
       const hWin = game.home_score !== null && game.home_score > game.away_score;
       const aWin = game.away_score !== null && game.away_score > game.home_score;
+      const hf = flag(game.home_team);
+      const af = flag(game.away_team);
       return `
         <div class="bracket-game">
           <div class="bracket-game-inner">
             <div class="bracket-team">
-              <span class="bracket-team-name ${isTbd ? "tbd" : ""}">${game.home_team}</span>
+              <span class="bracket-team-name ${isTbd ? "tbd" : ""}">${hf}${game.home_team}</span>
               <span class="bracket-score ${hWin ? "winner" : ""}">${game.home_score ?? ""}</span>
             </div>
             <div class="bracket-team">
-              <span class="bracket-team-name ${isTbd ? "tbd" : ""}">${game.away_team}</span>
+              <span class="bracket-team-name ${isTbd ? "tbd" : ""}">${af}${game.away_team}</span>
               <span class="bracket-score ${aWin ? "winner" : ""}">${game.away_score ?? ""}</span>
             </div>
           </div>
@@ -371,6 +584,18 @@ function renderFilters() {
     state.tournaments.map(t => `<button class="filter-btn ${state.activeTournament === t ? "active" : ""}" onclick="setTournament('${t}')">${t}</button>`).join("");
 }
 
+function computeTopEdgeGameId(allGames) {
+  let best = null;
+  let bestEdge = -Infinity;
+  for (const game of allGames) {
+    if (game.value_bets?.length) {
+      const maxEdge = Math.max(...game.value_bets.map(v => v.edge));
+      if (maxEdge > bestEdge) { bestEdge = maxEdge; best = game.id; }
+    }
+  }
+  return best;
+}
+
 function renderGames() {
   const container = document.getElementById("games");
   const all = [...state.liveGames, ...state.games];
@@ -383,6 +608,118 @@ function renderGames() {
 }
 
 function setTournament(t) { state.activeTournament = t; renderFilters(); renderGames(); }
+
+// ─── RANKING ──────────────────────────────────────────────────────
+async function loadRanking() {
+  const container = document.getElementById("ranking-content");
+  container.innerHTML = `<div class="loading"><span class="spinner"></span> Carregando ranking...</div>`;
+  try {
+    state.ranking = await apiFetch("/api/ranking");
+    renderRanking();
+  } catch (e) {
+    container.innerHTML = `<div class="empty"><h3>Erro ao carregar ranking</h3><p>${e.message}</p></div>`;
+  }
+}
+
+function renderRanking() {
+  const container = document.getElementById("ranking-content");
+  const data = state.ranking;
+  if (!data.length) {
+    container.innerHTML = `<div class="empty"><h3>Nenhum dado de ranking disponível</h3><p>Atualize os dados para calcular.</p></div>`;
+    return;
+  }
+
+  const maxForce = data.length > 0 ? data[0].force : 1;
+
+  const rows = data.map((t, i) => {
+    const pct = maxForce > 0 ? Math.max(0, Math.min(100, (t.force / maxForce) * 100)) : 0;
+    const posClass = i < 3 ? "top3" : "";
+    return `
+      <tr>
+        <td class="rank-pos ${posClass}">${i + 1}</td>
+        <td><span class="team-flag">${t.flag}</span><span class="rank-team">${t.team}</span></td>
+        <td><span class="rank-group">${t.group || "—"}</span></td>
+        <td style="color:var(--green);font-weight:600">${t.avg_attack.toFixed(2)}</td>
+        <td style="color:var(--red);font-weight:600">${t.avg_defense_conceded.toFixed(2)}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="rank-bar-wrap"><div class="rank-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+            <span style="font-weight:700;font-size:12px;color:var(--blue)">${t.force.toFixed(2)}</span>
+          </div>
+        </td>
+      </tr>`;
+  }).join("");
+
+  const teamOptions = data.map(t => `<option value="${t.team}">${t.flag} ${t.team}</option>`).join("");
+
+  container.innerHTML = `
+    <div class="ranking-header">
+      <h2>🏆 Ranking de Times</h2>
+      <span style="font-size:12px;color:var(--text-muted)">${data.length} times analisados</span>
+    </div>
+    <div class="ranking-table-wrap">
+      <table class="ranking-table">
+        <thead><tr><th>#</th><th>Time</th><th>Grupo</th><th>Ataque</th><th>Defesa</th><th>Força</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="compare-section">
+      <div class="compare-title">⚔️ Comparador de Times</div>
+      <div class="compare-controls">
+        <select id="compare-home">
+          <option value="">Selecione o time da casa</option>
+          ${teamOptions}
+        </select>
+        <select id="compare-away">
+          <option value="">Selecione o time visitante</option>
+          ${teamOptions}
+        </select>
+        <button class="btn-compare" onclick="runCompare()">Simular confronto</button>
+      </div>
+      <div id="compare-result"></div>
+    </div>`;
+}
+
+async function runCompare() {
+  const home = document.getElementById("compare-home")?.value;
+  const away = document.getElementById("compare-away")?.value;
+  const result = document.getElementById("compare-result");
+  if (!home || !away) { showToast("Atenção", "Selecione os dois times", ""); return; }
+  if (home === away) { showToast("Atenção", "Selecione times diferentes", ""); return; }
+  result.innerHTML = `<div class="loading"><span class="spinner"></span> Calculando...</div>`;
+  try {
+    const data = await apiFetch(`/api/compare?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`);
+    const hf = flag(home);
+    const af = flag(away);
+    result.innerHTML = `
+      <div class="compare-result">
+        <div class="compare-result-title">${hf}${home} vs ${af}${away}</div>
+        <div class="compare-probs">
+          <div class="compare-prob-row">
+            <span class="compare-prob-label">Vitória ${home}</span>
+            <div class="compare-prob-bar-wrap"><div class="compare-prob-bar home-bar" style="width:${data.home_win_prob}%"></div></div>
+            <span class="compare-prob-pct" style="color:var(--green)">${data.home_win_prob}%</span>
+          </div>
+          <div class="compare-prob-row">
+            <span class="compare-prob-label">Empate</span>
+            <div class="compare-prob-bar-wrap"><div class="compare-prob-bar draw-bar" style="width:${data.draw_prob}%"></div></div>
+            <span class="compare-prob-pct" style="color:var(--yellow)">${data.draw_prob}%</span>
+          </div>
+          <div class="compare-prob-row">
+            <span class="compare-prob-label">Vitória ${away}</span>
+            <div class="compare-prob-bar-wrap"><div class="compare-prob-bar away-bar" style="width:${data.away_win_prob}%"></div></div>
+            <span class="compare-prob-pct" style="color:var(--red)">${data.away_win_prob}%</span>
+          </div>
+        </div>
+        <div class="compare-scoreline">
+          Placar mais provável: <strong>${data.best_scoreline}</strong>
+          <span style="color:var(--text-muted)">(${data.scoreline_prob}% de chance)</span>
+        </div>
+      </div>`;
+  } catch (e) {
+    result.innerHTML = `<div class="empty"><p>Erro ao comparar: ${e.message}</p></div>`;
+  }
+}
 
 // ─── ACCURACY / QUOTA ─────────────────────────────────────────────
 async function updateHeaderStats() {
@@ -416,20 +753,31 @@ async function loadAll() {
     state.games = games; state.liveGames = live;
     state.standings = standings; state.tournaments = tournaments;
     state.bracket = bracket; state.valueBets = valueBets;
+
+    // Calcula top edge game id
+    const allForEdge = [...live, ...games];
+    state.topEdgeGameId = computeTopEdgeGameId(allForEdge);
+
     document.getElementById("last-update").textContent = "Atualizado: " + new Date().toLocaleTimeString("pt-BR");
     // Notifica value bets novos
     if (valueBets.length > 0) {
       const topEdge = valueBets[0].value_bets[0];
       showToast("💰 Aposta de valor!", `${valueBets[0].home_team} vs ${valueBets[0].away_team} — ${topEdge.label} @ ${topEdge.best_odd} (+${topEdge.edge}% edge)`, "");
     }
+
+    checkUpcomingGameNotifications([...live, ...games]);
   } catch (e) {
     document.getElementById("games").innerHTML = `<div class="empty"><h3>Erro</h3><p>${e.message}</p></div>`;
     return;
   }
-  renderLiveBar(); renderFilters(); renderGames();
+  renderLiveBar();
+  updateLiveTabBadge();
+  renderFilters();
+  renderGames();
+  renderCountdown();
   if (state.activeTab === "grupos") renderGroups();
   if (state.activeTab === "chaveamento") renderBracket();
-  if (state.activeTab === "valor") renderValueBets();
+  if (state.activeTab === "valor") { renderValueBets(); loadTipDay(); }
   updateHeaderStats();
 }
 
@@ -452,7 +800,16 @@ function startLivePolling() {
       detectGoals(live);
       state.liveGames = live; state.standings = standings;
       state.bracket = bracket; state.valueBets = valueBets;
-      renderLiveBar(); renderGames();
+
+      // Recompute top edge
+      state.topEdgeGameId = computeTopEdgeGameId([...live, ...state.games]);
+
+      checkUpcomingGameNotifications([...live, ...state.games]);
+
+      renderLiveBar();
+      updateLiveTabBadge();
+      renderGames();
+      renderCountdown();
       if (state.activeTab === "grupos") renderGroups();
       if (state.activeTab === "chaveamento") renderBracket();
       if (state.activeTab === "valor") renderValueBets();
@@ -462,6 +819,7 @@ function startLivePolling() {
 
 // ─── INIT ─────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
+  initTheme();
   await requestNotifications();
   await loadAll();
   startLivePolling();

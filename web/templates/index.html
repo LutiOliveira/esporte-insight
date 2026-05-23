@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Esporte Insight — Projeções e Odds</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#1f6feb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -14,6 +18,7 @@
     <span id="accuracy-status"></span>
     <span id="quota-status"></span>
     <span class="last-update" id="last-update">—</span>
+    <button class="btn-theme" id="btn-theme" onclick="toggleTheme()" title="Alternar tema">🌙</button>
     <button class="btn-refresh" id="btn-refresh" onclick="refresh()">Atualizar dados</button>
   </div>
 </header>
@@ -32,6 +37,7 @@
     <button class="nav-tab"        onclick="switchTab('chaveamento')" id="tab-chaveamento">Chaveamento</button>
     <button class="nav-tab"        onclick="switchTab('valor')"       id="tab-valor">💎 Apostas de Valor</button>
     <button class="nav-tab"        onclick="switchTab('simulador')"   id="tab-simulador">🎮 Simulador</button>
+    <button class="nav-tab"        onclick="switchTab('ranking')"     id="tab-ranking">🏆 Ranking</button>
   </div>
 
   <!-- Filtros (só na aba Jogos) -->
@@ -39,6 +45,7 @@
 
   <!-- Aba: Jogos -->
   <div id="view-jogos">
+    <div id="countdown-container"></div>
     <div class="games-grid" id="games">
       <div class="loading"><span class="spinner"></span> Carregando...</div>
     </div>
@@ -71,6 +78,9 @@
       </a>
     </div>
 
+    <!-- Tip do dia -->
+    <div id="tip-day-container"></div>
+
     <div id="value-bets-list">
       <div class="loading"><span class="spinner"></span> Analisando apostas...</div>
     </div>
@@ -80,11 +90,21 @@
   <div id="view-simulador" style="display:none">
     <div id="simulator-content"></div>
   </div>
+
+  <!-- Aba: Ranking -->
+  <div id="view-ranking" style="display:none">
+    <div id="ranking-content">
+      <div class="loading"><span class="spinner"></span> Carregando ranking...</div>
+    </div>
+  </div>
 </main>
 
 <!-- Container de toasts de gol -->
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/static/app.js"></script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js');
+</script>
 </body>
 </html>
