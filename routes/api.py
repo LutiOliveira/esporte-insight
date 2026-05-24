@@ -7,12 +7,16 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 def _game_dict(game):
     """Serializa jogo com value bets incluídos."""
-    from services.value_bet_service import analyze_game, get_affiliate_link
+    from services.value_bet_service import analyze_game, get_affiliate_link, compute_ou_probs
     d = game.to_dict()
     d["value_bets"] = analyze_game(game)
     # Adiciona affiliate link a cada odd
     for o in d.get("odds", []):
         o["affiliate_link"] = get_affiliate_link(o["bookmaker"])
+    # Projeções Over/Under baseadas no modelo Poisson
+    proj = game.projection
+    if proj:
+        d["ou_projections"] = compute_ou_probs(proj.home_goals_proj, proj.away_goals_proj)
     return d
 
 

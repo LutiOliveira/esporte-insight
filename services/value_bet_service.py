@@ -4,6 +4,8 @@ com a probabilidade implícita das odds para encontrar apostas com vantagem real
 Edge = prob_modelo - prob_implícita. Threshold mínimo: 5%.
 """
 
+import math as _math
+
 MIN_EDGE = 0.05
 
 AFFILIATE_LINKS = {
@@ -26,6 +28,34 @@ AFFILIATE_LINKS = {
 
 def get_affiliate_link(bookmaker: str) -> str:
     return AFFILIATE_LINKS.get(bookmaker, "#")
+
+
+def _poisson_prob_ou(k, lam):
+    if lam <= 0 or k < 0:
+        return 0
+    return (lam ** k * _math.exp(-lam)) / _math.factorial(k)
+
+
+def compute_ou_probs(lambda_home: float, lambda_away: float) -> dict:
+    """Retorna probabilidades de Over/Under para 0.5, 1.5, 2.5, 3.5."""
+    max_goals = 10
+    total_probs = {}
+    for h in range(max_goals):
+        for a in range(max_goals):
+            t = h + a
+            p = _poisson_prob_ou(h, lambda_home) * _poisson_prob_ou(a, lambda_away)
+            total_probs[t] = total_probs.get(t, 0.0) + p
+
+    result = {}
+    for line in [0.5, 1.5, 2.5, 3.5]:
+        floor_line = int(line)
+        over_prob = sum(v for k, v in total_probs.items() if k > floor_line)
+        under_prob = 1.0 - over_prob
+        result[str(line)] = {
+            "over": round(over_prob, 4),
+            "under": round(under_prob, 4),
+        }
+    return result
 
 
 def analyze_game(game) -> list[dict]:
@@ -57,6 +87,8 @@ def analyze_game(game) -> list[dict]:
         edge = model_prob - implied
 
         if edge >= MIN_EDGE:
+            kelly_pct = (model_prob * best_odd - 1) / (best_odd - 1)
+            kelly_pct = max(0.001, min(kelly_pct, 0.25))
             results.append({
                 "outcome": key,
                 "label": labels[key],
@@ -66,6 +98,9 @@ def analyze_game(game) -> list[dict]:
                 "best_odd": round(best_odd, 2),
                 "bookmaker": best.bookmaker,
                 "affiliate_link": get_affiliate_link(best.bookmaker),
+                "kelly_pct": round(kelly_pct * 100, 1),
+                "half_kelly_pct": round(kelly_pct * 50, 1),
+                "market_type": "1x2",
             })
 
     return sorted(results, key=lambda x: x["edge"], reverse=True)

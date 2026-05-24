@@ -78,6 +78,47 @@
       </a>
     </div>
 
+    <!-- Filtros Apostas de Valor -->
+    <div class="valor-filters" id="valor-filters">
+      <div class="valor-filter-group">
+        <label>Edge mínimo</label>
+        <div class="edge-slider-wrap">
+          <input type="range" id="filter-min-edge" min="0" max="30" value="5" step="1" oninput="applyValorFilters()">
+          <span id="filter-edge-display">5%</span>
+        </div>
+      </div>
+      <div class="valor-filter-group">
+        <label>Mercado</label>
+        <select id="filter-market" onchange="applyValorFilters()">
+          <option value="all">Todos</option>
+          <option value="1x2">1X2</option>
+          <option value="ou">Over/Under</option>
+        </select>
+      </div>
+      <div class="valor-filter-group">
+        <label>Ordenar por</label>
+        <select id="filter-sort" onchange="applyValorFilters()">
+          <option value="edge">Maior edge</option>
+          <option value="odd">Maior odd</option>
+          <option value="kelly">Maior Kelly</option>
+          <option value="time">Horário</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Calculadora Bankroll -->
+    <div class="bankroll-panel" id="bankroll-panel">
+      <div class="bankroll-icon">💼</div>
+      <div class="bankroll-input-group">
+        <label for="bankroll-input">Sua banca (R$)</label>
+        <input type="number" id="bankroll-input" value="1000" min="1" step="100"
+               oninput="updateKellyValues()" placeholder="Ex: 1000">
+      </div>
+      <div class="bankroll-info" id="bankroll-info">
+        Digite sua banca para ver quanto apostar em cada value bet (Critério de Kelly)
+      </div>
+    </div>
+
     <!-- Tip do dia -->
     <div id="tip-day-container"></div>
 

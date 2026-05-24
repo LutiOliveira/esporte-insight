@@ -168,7 +168,7 @@ function switchTab(tab) {
   document.getElementById("filters").style.display = tab === "jogos" ? "" : "none";
   if (tab === "grupos") renderGroups();
   if (tab === "chaveamento") renderBracket();
-  if (tab === "valor") { renderValueBets(); loadTipDay(); }
+  if (tab === "valor") { initBankroll(); renderValueBets(); loadTipDay(); }
   if (tab === "simulador") renderSimulator();
   if (tab === "ranking") loadRanking();
 }
@@ -261,10 +261,14 @@ function renderCountdown() {
 // ─── JOGOS ────────────────────────────────────────────────────────
 function renderValueBetSection(valueBets) {
   if (!valueBets?.length) return "";
+  const bankroll = getBankroll();
   return `
     <div class="value-bet-section">
       <div class="value-bet-title">💰 Apostas de Valor</div>
-      ${valueBets.map(vb => `
+      ${valueBets.map(vb => {
+        const kellyR = bankroll * (vb.kelly_pct || 0) / 100;
+        const halfKellyR = bankroll * (vb.half_kelly_pct || 0) / 100;
+        return `
         <div class="value-bet-item">
           <div class="value-bet-info">
             <div class="value-bet-label">${vb.label}</div>
@@ -274,10 +278,42 @@ function renderValueBetSection(valueBets) {
           </div>
           <div class="value-bet-right">
             <span class="edge-badge">+${vb.edge}% edge</span>
+            ${vb.kelly_pct ? `
+            <span class="kelly-badge" title="Critério de Kelly — Meio Kelly é mais conservador">
+              🎯 Kelly: ${vb.kelly_pct}% = <span class="kelly-amount" data-pct="${vb.kelly_pct}">R$ ${kellyR.toFixed(2)}</span>
+              <span style="opacity:.7">(½K: ${vb.half_kelly_pct}% = <span class="kelly-amount" data-pct="${vb.half_kelly_pct}">R$ ${halfKellyR.toFixed(2)}</span>)</span>
+            </span>` : ""}
             <span class="odd-badge">${vb.best_odd}</span>
             <a class="bet-cta" href="${vb.affiliate_link}" target="_blank" rel="noopener">Apostar →</a>
           </div>
-        </div>`).join("")}
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+function renderOUTable(game) {
+  const ou = game.ou_projections;
+  if (!ou) return "";
+  const lines = ["0.5", "1.5", "2.5", "3.5"];
+  return `
+    <div class="ou-section">
+      <div class="ou-title">📊 Total de Gols — Projeções O/U</div>
+      <div class="ou-grid">
+        ${lines.map(line => {
+          const p = ou[line];
+          if (!p) return "";
+          const overPct = (p.over * 100).toFixed(0);
+          const underPct = (p.under * 100).toFixed(0);
+          return `
+            <div class="ou-item">
+              <div class="ou-line">O/U ${line}</div>
+              <div class="ou-probs">
+                <span class="ou-over ${p.over > 0.6 ? "ou-hot" : ""}">▲ Over: ${overPct}%</span>
+                <span class="ou-under ${p.under > 0.6 ? "ou-hot" : ""}">▼ Under: ${underPct}%</span>
+              </div>
+            </div>`;
+        }).join("")}
+      </div>
     </div>`;
 }
 
@@ -383,6 +419,7 @@ function renderGame(game) {
         </div>
       </div>
       ${isLive ? "" : renderProjection(game)}
+      ${isLive ? "" : renderOUTable(game)}
       ${renderValueBetSection(game.value_bets)}
       ${renderOddsTable(game)}
       <div style="padding:4px 16px 8px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -393,14 +430,40 @@ function renderGame(game) {
 }
 
 // ─── ABA VALOR ────────────────────────────────────────────────────
-function renderValueBets() {
+function applyValorFilters() {
+  const minEdge = parseFloat(document.getElementById("filter-min-edge")?.value || 5);
+  const edgeDisplay = document.getElementById("filter-edge-display");
+  if (edgeDisplay) edgeDisplay.textContent = minEdge + "%";
+  const market = document.getElementById("filter-market")?.value || "all";
+  const sort = document.getElementById("filter-sort")?.value || "edge";
+
+  let games = [...state.valueBets];
+
+  games = games.map(g => ({
+    ...g,
+    value_bets: (g.value_bets || []).filter(vb => {
+      if (vb.edge < minEdge) return false;
+      if (market === "1x2" && vb.market_type === "ou") return false;
+      if (market === "ou" && vb.market_type !== "ou") return false;
+      return true;
+    })
+  })).filter(g => g.value_bets.length > 0);
+
+  if (sort === "edge") games.sort((a, b) => Math.max(...b.value_bets.map(v => v.edge)) - Math.max(...a.value_bets.map(v => v.edge)));
+  else if (sort === "odd") games.sort((a, b) => Math.max(...b.value_bets.map(v => v.best_odd)) - Math.max(...a.value_bets.map(v => v.best_odd)));
+  else if (sort === "kelly") games.sort((a, b) => Math.max(...b.value_bets.map(v => v.kelly_pct || 0)) - Math.max(...a.value_bets.map(v => v.kelly_pct || 0)));
+  else if (sort === "time") games.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+
   const container = document.getElementById("value-bets-list");
-  const games = state.valueBets;
   if (!games.length) {
-    container.innerHTML = `<div class="empty"><h3>Nenhuma aposta de valor encontrada agora</h3><p>O modelo compara as probabilidades com as odds do mercado. Volte quando houver mais jogos disponíveis.</p></div>`;
+    container.innerHTML = `<div class="empty"><h3>Nenhuma aposta com edge ≥ ${minEdge}%</h3><p>Reduza o filtro de edge mínimo ou aguarde novos jogos.</p></div>`;
     return;
   }
   container.innerHTML = games.map(game => renderGame(game)).join("");
+}
+
+function renderValueBets() {
+  applyValorFilters();
 }
 
 // ─── TIP DO DIA ───────────────────────────────────────────────────
@@ -467,47 +530,150 @@ function simReset() {
   renderSimulator();
 }
 
+function simSettle(betId, result) {
+  const data = simLoad();
+  const bet = data.bets.find(b => String(b.id) === String(betId));
+  if (!bet) return;
+  bet.status = result;
+  if (result === "won") {
+    data.balance = parseFloat((data.balance + bet.potential).toFixed(2));
+  }
+  simSave(data);
+  renderSimulator();
+  showToast(
+    result === "won" ? "✅ Aposta ganha!" : "❌ Aposta perdida",
+    `${bet.label} @ ${bet.odd}${result === "won" ? ` — +R$ ${(bet.potential - bet.amount).toFixed(2)}` : ""}`,
+    result === "won" ? "toast-goal" : ""
+  );
+}
+
 function renderSimulator() {
   const container = document.getElementById("simulator-content");
   const data = simLoad();
   const pending = data.bets.filter(b => b.status === "pending");
-  const history = data.bets.filter(b => b.status !== "pending").reverse().slice(0, 20);
+  const settled = data.bets.filter(b => b.status !== "pending");
+  const won = settled.filter(b => b.status === "won");
+
+  // Métricas
+  const totalStaked = settled.reduce((s, b) => s + b.amount, 0);
+  const totalReturn = won.reduce((s, b) => s + b.potential, 0);
+  const profit = totalReturn - totalStaked;
+  const roi = totalStaked > 0 ? (profit / totalStaked * 100) : 0;
+  const winRate = settled.length > 0 ? (won.length / settled.length * 100) : 0;
+  const avgOdd = settled.length > 0 ? settled.reduce((s, b) => s + b.odd, 0) / settled.length : 0;
+  const startingBalance = 1000;
+  const currentBalance = data.balance;
+
+  // Curva de lucro (últimos 20 settled)
+  const recentSettled = settled.slice(-20);
+  let runningProfit = 0;
+  const profitPoints = recentSettled.map(b => {
+    runningProfit += (b.status === "won" ? b.potential - b.amount : -b.amount);
+    return runningProfit;
+  });
+  const maxAbs = Math.max(...profitPoints.map(Math.abs), 1);
+  const sparkline = profitPoints.length > 1 ? `
+    <svg width="100%" height="48" viewBox="0 0 ${profitPoints.length * 12} 48" preserveAspectRatio="none" style="display:block">
+      <polyline
+        fill="none"
+        stroke="${profit >= 0 ? "#3fb950" : "#f85149"}"
+        stroke-width="2"
+        points="${profitPoints.map((p, i) => `${i * 12 + 6},${24 - (p / maxAbs) * 20}`).join(" ")}"
+      />
+      <line x1="0" y1="24" x2="${profitPoints.length * 12}" y2="24" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/>
+    </svg>` : "";
+
+  // Streak atual
+  let streak = 0;
+  let streakType = "";
+  for (let i = settled.length - 1; i >= 0; i--) {
+    if (i === settled.length - 1) { streakType = settled[i].status; streak = 1; }
+    else if (settled[i].status === streakType) streak++;
+    else break;
+  }
+  const streakLabel = streakType === "won"
+    ? `🔥 ${streak} vitória${streak > 1 ? "s" : ""} seguida${streak > 1 ? "s" : ""}`
+    : streakType === "lost"
+    ? `❄️ ${streak} derrota${streak > 1 ? "s" : ""} seguida${streak > 1 ? "s" : ""}`
+    : "";
 
   const betRow = b => `
     <div class="sim-bet-item">
       <div class="sim-bet-info">
-        <div class="sim-bet-game">${b.homeTeam} vs ${b.awayTeam}</div>
-        <div class="sim-bet-detail">${b.label} @ ${b.odd} · R$ ${b.amount.toFixed(2)} → R$ ${b.potential.toFixed(2)} possível</div>
+        <div class="sim-bet-game">${flag(b.homeTeam)}${b.homeTeam} vs ${b.awayTeam}${flag(b.awayTeam)}</div>
+        <div class="sim-bet-detail">${b.label} @ ${b.odd} · R$ ${b.amount.toFixed(2)}
+          ${b.status === "won" ? ` → <span style="color:#3fb950">+R$ ${(b.potential - b.amount).toFixed(2)}</span>` :
+            b.status === "lost" ? ` → <span style="color:#f85149">-R$ ${b.amount.toFixed(2)}</span>` :
+            ` → R$ ${b.potential.toFixed(2)} possível`}
+        </div>
       </div>
-      <span class="sim-bet-status ${b.status}">${b.status === "pending" ? "Aguardando" : b.status === "won" ? "✅ Ganhou" : "❌ Perdeu"}</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${b.status === "pending" ? `
+          <button onclick="simSettle('${b.id}','won')" class="btn-settle won" title="Marcar como ganha">✅</button>
+          <button onclick="simSettle('${b.id}','lost')" class="btn-settle lost" title="Marcar como perdida">❌</button>` : ""}
+        <span class="sim-bet-status ${b.status}">${b.status === "pending" ? "Aberta" : b.status === "won" ? "✅ Ganhou" : "❌ Perdeu"}</span>
+      </div>
     </div>`;
 
   container.innerHTML = `
     <div class="simulator-panel">
+      <!-- Header -->
       <div class="simulator-header">
         <div>
-          <div class="simulator-title">💰 Simulador de Apostas</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Clique em qualquer odd na aba Jogos para apostar virtualmente</div>
+          <div class="simulator-title">📊 Performance Tracker</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Clique em qualquer odd nos Jogos para apostar virtualmente</div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
           <div>
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Saldo Virtual</div>
-            <div class="balance-display">R$ ${data.balance.toFixed(2)}</div>
+            <div class="balance-display" style="color:${currentBalance >= startingBalance ? "#3fb950" : "#f85149"}">R$ ${currentBalance.toFixed(2)}</div>
           </div>
           <button onclick="simReset()" class="filter-btn" style="height:fit-content">Resetar</button>
         </div>
       </div>
 
+      <!-- Stats grid -->
+      ${settled.length > 0 ? `
+      <div class="roi-stats-grid">
+        <div class="roi-stat ${profit >= 0 ? "positive" : "negative"}">
+          <div class="roi-stat-value">${profit >= 0 ? "+" : ""}R$ ${profit.toFixed(2)}</div>
+          <div class="roi-stat-label">Lucro Total</div>
+        </div>
+        <div class="roi-stat ${roi >= 0 ? "positive" : "negative"}">
+          <div class="roi-stat-value">${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%</div>
+          <div class="roi-stat-label">ROI</div>
+        </div>
+        <div class="roi-stat">
+          <div class="roi-stat-value">${winRate.toFixed(0)}%</div>
+          <div class="roi-stat-label">Acerto ${won.length}/${settled.length}</div>
+        </div>
+        <div class="roi-stat">
+          <div class="roi-stat-value">${avgOdd.toFixed(2)}</div>
+          <div class="roi-stat-label">Odd Média</div>
+        </div>
+      </div>
+
+      ${streakLabel ? `<div class="streak-badge">${streakLabel}</div>` : ""}
+
+      ${profitPoints.length > 1 ? `
+        <div class="profit-chart">
+          <div class="profit-chart-label">Curva de Lucro (últimas ${profitPoints.length} apostas)</div>
+          ${sparkline}
+        </div>` : ""}
+      ` : ""}
+
+      <!-- Apostas abertas -->
       ${pending.length ? `
         <div style="margin-bottom:16px;">
-          <div class="odds-title" style="margin-bottom:10px;">Apostas Abertas (${pending.length})</div>
+          <div class="odds-title" style="margin-bottom:8px;">⏳ Apostas Abertas (${pending.length})</div>
           <div class="sim-bets-list">${pending.map(betRow).join("")}</div>
         </div>` : ""}
 
-      ${history.length ? `
+      <!-- Histórico -->
+      ${settled.length ? `
         <div>
-          <div class="odds-title" style="margin-bottom:10px;">Histórico</div>
-          <div class="sim-bets-list">${history.map(betRow).join("")}</div>
+          <div class="odds-title" style="margin-bottom:8px;">📋 Histórico (${settled.length} apostas)</div>
+          <div class="sim-bets-list">${settled.slice().reverse().slice(0, 15).map(betRow).join("")}</div>
         </div>` :
         (!pending.length ? `<div class="sim-empty">Nenhuma aposta ainda.<br>Vá para a aba <strong>Jogos</strong> e clique em qualquer odd!</div>` : "")}
     </div>`;
@@ -817,9 +983,36 @@ function startLivePolling() {
   }, 30_000);
 }
 
+// ─── CALCULADORA BANKROLL ─────────────────────────────────────────
+function getBankroll() {
+  const input = document.getElementById("bankroll-input");
+  const val = parseFloat(input?.value || "1000");
+  return isNaN(val) || val <= 0 ? 1000 : val;
+}
+
+function updateKellyValues() {
+  const bankroll = getBankroll();
+  localStorage.setItem("esporte_bankroll", bankroll);
+  document.querySelectorAll(".kelly-amount").forEach(el => {
+    const pct = parseFloat(el.dataset.pct || "0");
+    el.textContent = `R$ ${(bankroll * pct / 100).toFixed(2)}`;
+  });
+  const info = document.getElementById("bankroll-info");
+  if (info) info.textContent = `Banca: R$ ${bankroll.toFixed(2)} — Kelly mostra quanto apostar em cada bet abaixo`;
+}
+
+function initBankroll() {
+  const saved = localStorage.getItem("esporte_bankroll");
+  if (saved) {
+    const input = document.getElementById("bankroll-input");
+    if (input) { input.value = saved; updateKellyValues(); }
+  }
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
+  initBankroll();
   await requestNotifications();
   await loadAll();
   startLivePolling();

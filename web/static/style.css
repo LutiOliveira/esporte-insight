@@ -1207,3 +1207,99 @@ main {
   .compare-controls { flex-direction: column; }
   .compare-controls select { min-width: 100%; }
 }
+
+/* ── FEATURE 1 — Kelly badge ─────────────────────────────────── */
+.kelly-badge {
+  background: rgba(139, 92, 246, .15);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, .3);
+  border-radius: 12px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+html.light .kelly-badge { background: #f5f0ff; color: #7c3aed; border-color: #c4b5fd; }
+
+/* ── FEATURE 2 — Over/Under projections ─────────────────────── */
+.ou-section { padding: 8px 16px 4px; border-top: 1px solid var(--border); }
+.ou-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
+.ou-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.ou-item { background: var(--surface2); border-radius: 8px; padding: 6px 10px; min-width: 110px; }
+.ou-line { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+.ou-probs { display: flex; flex-direction: column; gap: 2px; }
+.ou-over { color: #3fb950; font-size: 12px; font-weight: 600; }
+.ou-under { color: #f85149; font-size: 12px; font-weight: 600; }
+.ou-hot { font-weight: 800; text-decoration: underline; }
+
+/* ── FEATURE 3 — Filtros apostas de valor ───────────────────── */
+.valor-filters {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0 0 16px;
+}
+.valor-filter-group { display: flex; flex-direction: column; gap: 4px; }
+.valor-filter-group label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.valor-filter-group select {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 4px 8px; font-size: 13px;
+}
+.edge-slider-wrap { display: flex; align-items: center; gap: 8px; }
+.edge-slider-wrap input[type=range] { width: 120px; accent-color: var(--accent); }
+#filter-edge-display { font-size: 13px; font-weight: 700; color: var(--accent); min-width: 30px; }
+
+/* ── FEATURE 4 — ROI Dashboard ──────────────────────────────── */
+.roi-stats-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin: 12px 0;
+}
+@media (max-width: 600px) { .roi-stats-grid { grid-template-columns: repeat(2, 1fr); } }
+.roi-stat {
+  background: var(--surface2); border-radius: 10px;
+  padding: 12px; text-align: center;
+  border: 1px solid var(--border);
+}
+.roi-stat.positive { border-color: rgba(63, 185, 80, .3); background: rgba(63, 185, 80, .07); }
+.roi-stat.negative { border-color: rgba(248, 81, 73, .3); background: rgba(248, 81, 73, .07); }
+.roi-stat-value { font-size: 20px; font-weight: 800; color: var(--text); }
+.roi-stat.positive .roi-stat-value { color: #3fb950; }
+.roi-stat.negative .roi-stat-value { color: #f85149; }
+.roi-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.streak-badge {
+  display: inline-block; background: rgba(210, 153, 34, .1);
+  border: 1px solid rgba(210, 153, 34, .3); color: var(--yellow);
+  border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 600;
+  margin-bottom: 12px;
+}
+.profit-chart {
+  background: var(--surface2); border-radius: 10px; padding: 12px;
+  margin-bottom: 14px; border: 1px solid var(--border);
+}
+.profit-chart-label { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.btn-settle {
+  border: none; border-radius: 6px; padding: 4px 10px;
+  font-size: 14px; cursor: pointer; background: var(--surface2);
+}
+.btn-settle.won:hover { background: rgba(63, 185, 80, .2); }
+.btn-settle.lost:hover { background: rgba(248, 81, 73, .2); }
+
+/* ── FEATURE 5 — Bankroll calculator ───────────────────────── */
+.bankroll-panel {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(31, 111, 235, .08), rgba(139, 92, 246, .08));
+  border: 1px solid rgba(31, 111, 235, .3);
+  border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;
+}
+.bankroll-icon { font-size: 28px; }
+.bankroll-input-group { display: flex; flex-direction: column; gap: 4px; }
+.bankroll-input-group label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+.bankroll-input-group input {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 6px 12px;
+  font-size: 15px; font-weight: 700; width: 140px;
+}
+.bankroll-info { font-size: 12px; color: var(--text-muted); flex: 1; min-width: 180px; }
+html.light .bankroll-panel { background: linear-gradient(135deg, #eff6ff, #f5f0ff); border-color: #93c5fd; }
