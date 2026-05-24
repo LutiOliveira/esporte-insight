@@ -121,7 +121,7 @@ class OddsService:
         params = {
             "apiKey": api_key,
             "regions": "eu,us",
-            "markets": "h2h",
+            "markets": "h2h,totals",
             "oddsFormat": "decimal",
         }
         try:
@@ -212,6 +212,35 @@ class OddsService:
                             draw=draw,
                             away_win=away,
                         ))
+
+            # Processa mercado de totals (Over/Under)
+            from models import OddsTotal
+            OddsTotal.query.filter_by(game_id=game.id).delete()
+            for bookmaker in g.get("bookmakers", []):
+                bm_name = BOOKMAKER_NAMES.get(bookmaker["key"], bookmaker["title"])
+                for market in bookmaker.get("markets", []):
+                    if market["key"] != "totals":
+                        continue
+                    # Agrupa outcomes por linha (description = "2.5" etc.)
+                    lines_dict: dict[float, dict] = {}
+                    for outcome in market["outcomes"]:
+                        try:
+                            line_val = float(outcome.get("description", "0"))
+                        except (ValueError, TypeError):
+                            continue
+                        if line_val not in lines_dict:
+                            lines_dict[line_val] = {}
+                        side = outcome["name"].lower()  # "over" ou "under"
+                        lines_dict[line_val][side] = outcome["price"]
+                    for line_val, sides in lines_dict.items():
+                        if "over" in sides and "under" in sides:
+                            db.session.add(OddsTotal(
+                                game_id=game.id,
+                                bookmaker=bm_name,
+                                line=line_val,
+                                over_price=sides["over"],
+                                under_price=sides["under"],
+                            ))
         db.session.commit()
 
     def seed_copa26_schedule(self):

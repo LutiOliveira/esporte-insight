@@ -23,6 +23,7 @@ class Game(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     odds = db.relationship("Odds", backref="game", cascade="all, delete-orphan")
+    odds_total = db.relationship("OddsTotal", backref="game", cascade="all, delete-orphan")
     projection = db.relationship("Projection", backref="game", uselist=False, cascade="all, delete-orphan")
 
     def to_dict(self):
@@ -43,5 +44,6 @@ class Game(db.Model):
             "away_score": self.away_score,
             "minute": self.minute,
             "odds": [o.to_dict() for o in self.odds],
+            "odds_total": [o.to_dict() for o in self.odds_total],
             "projection": self.projection.to_dict() if self.projection else None,
         }

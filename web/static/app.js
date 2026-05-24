@@ -266,8 +266,14 @@ function renderValueBetSection(valueBets) {
     <div class="value-bet-section">
       <div class="value-bet-title">💰 Apostas de Valor</div>
       ${valueBets.map(vb => {
-        const kellyR = bankroll * (vb.kelly_pct || 0) / 100;
-        const halfKellyR = bankroll * (vb.half_kelly_pct || 0) / 100;
+        const qKellyR = bankroll * (vb.quarter_kelly_pct || 0) / 100;
+        const fKellyR = bankroll * (vb.kelly_pct || 0) / 100;
+        const edgeQualityBadge = vb.is_real_edge
+          ? `<span class="real-edge-badge" title="Modelo Elo independente">✅ Edge real</span>`
+          : `<span class="est-edge-badge" title="Modelo circular — use com cautela">⚠️ Estimado</span>`;
+        const kellyBadge = (vb.quarter_kelly_pct != null && vb.quarter_kelly_pct > 0)
+          ? `<span class="kelly-badge">🎯 ¼Kelly: ${vb.quarter_kelly_pct}% = <span class="kelly-amount" data-pct="${vb.quarter_kelly_pct}">R$ ${qKellyR.toFixed(2)}</span> <span style="opacity:.6">(Full: ${vb.kelly_pct}%)</span></span>`
+          : "";
         return `
         <div class="value-bet-item">
           <div class="value-bet-info">
@@ -278,11 +284,7 @@ function renderValueBetSection(valueBets) {
           </div>
           <div class="value-bet-right">
             <span class="edge-badge">+${vb.edge}% edge</span>
-            ${vb.kelly_pct ? `
-            <span class="kelly-badge" title="Critério de Kelly — Meio Kelly é mais conservador">
-              🎯 Kelly: ${vb.kelly_pct}% = <span class="kelly-amount" data-pct="${vb.kelly_pct}">R$ ${kellyR.toFixed(2)}</span>
-              <span style="opacity:.7">(½K: ${vb.half_kelly_pct}% = <span class="kelly-amount" data-pct="${vb.half_kelly_pct}">R$ ${halfKellyR.toFixed(2)}</span>)</span>
-            </span>` : ""}
+            ${edgeQualityBadge}${kellyBadge}
             <span class="odd-badge">${vb.best_odd}</span>
             <a class="bet-cta" href="${vb.affiliate_link}" target="_blank" rel="noopener">Apostar →</a>
           </div>
@@ -356,6 +358,13 @@ function renderOddsTable(game) {
 function renderProjection(game) {
   const p = game.projection;
   if (!p) return "";
+  const bttsHtml = (game.btts_yes != null) ? `
+    <div class="btts-row">
+      <span class="btts-label">⚽ Ambos Marcam</span>
+      <span class="btts-yes ${game.btts_yes > 60 ? 'btts-hot' : ''}">Sim: ${game.btts_yes}%</span>
+      <span class="btts-sep">·</span>
+      <span class="btts-no ${game.btts_no > 60 ? 'btts-hot-no' : ''}">Não: ${game.btts_no}%</span>
+    </div>` : "";
   return `
     <div class="prob-bar-wrapper">
       <div class="prob-labels"><span>${flag(game.home_team)}${game.home_team}</span><span>Empate</span><span>${flag(game.away_team)}${game.away_team}</span></div>
@@ -373,7 +382,8 @@ function renderProjection(game) {
     <div class="scoreline-badge">
       Placar mais provável: <span class="score">${p.best_scoreline}</span>
       <span class="pct">(${p.scoreline_prob}% de chance)</span>
-    </div>`;
+    </div>
+    ${bttsHtml}`;
 }
 
 function renderGame(game) {
@@ -384,6 +394,9 @@ function renderGame(game) {
   const groupLabel = game.group_name ? `<span class="game-group">${game.group_name}</span>` : "";
   const valueBadge = hasValue ? `<span class="value-card-badge">💰 VALOR</span>` : "";
   const topEdgeBadge = isTopEdge ? `<span class="top-edge-badge">🔥 TOP EDGE</span>` : "";
+  const modelBadge = game.model_type === "elo"
+    ? `<span class="model-badge model-elo" title="Modelo Elo independente — edge real">🎯 Elo</span>`
+    : `<span class="model-badge model-odds" title="Modelo derivado das odds — edge estimado">📊 Est.</span>`;
   const hf = flag(game.home_team);
   const af = flag(game.away_team);
 
@@ -391,7 +404,7 @@ function renderGame(game) {
     <div class="game-card" style="${isLive ? "border-color:rgba(248,81,73,.5);" : hasValue ? "border-color:rgba(63,185,80,.4);" : ""}">
       <div class="game-header">
         <div class="game-header-left">
-          <span class="game-tournament">${game.tournament} ${groupLabel}${valueBadge}${topEdgeBadge}</span>
+          <span class="game-tournament">${game.tournament} ${groupLabel}${valueBadge}${topEdgeBadge}${modelBadge}</span>
         </div>
         <span class="game-time">${formatDateTime(game.start_time)}</span>
       </div>

@@ -13,10 +13,15 @@ def _game_dict(game):
     # Adiciona affiliate link a cada odd
     for o in d.get("odds", []):
         o["affiliate_link"] = get_affiliate_link(o["bookmaker"])
-    # Projeções Over/Under baseadas no modelo Poisson
+
+    # O/U projections (modelo Poisson) + BTTS + model_type
     proj = game.projection
-    if proj:
+    if proj and proj.home_goals_proj and proj.away_goals_proj:
         d["ou_projections"] = compute_ou_probs(proj.home_goals_proj, proj.away_goals_proj)
+        d["btts_yes"] = round(proj.btts_yes * 100, 1) if proj.btts_yes else None
+        d["btts_no"]  = round(proj.btts_no * 100, 1) if proj.btts_no else None
+        d["model_type"] = proj.model_type or "odds_derived"
+
     return d
 
 

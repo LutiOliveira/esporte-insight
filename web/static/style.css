@@ -1303,3 +1303,25 @@ html.light .kelly-badge { background: #f5f0ff; color: #7c3aed; border-color: #c4
 }
 .bankroll-info { font-size: 12px; color: var(--text-muted); flex: 1; min-width: 180px; }
 html.light .bankroll-panel { background: linear-gradient(135deg, #eff6ff, #f5f0ff); border-color: #93c5fd; }
+
+/* ─── BTTS ─────────────────────────────────────────────────────── */
+.btts-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 16px 4px; font-size:13px; }
+.btts-label { color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; }
+.btts-sep { color:var(--text-muted); }
+.btts-yes { color:#3fb950; font-weight:700; }
+.btts-no  { color:#f85149; font-weight:700; }
+.btts-hot    { font-size:14px; text-decoration:underline; }
+.btts-hot-no { font-size:14px; text-decoration:underline; }
+
+/* ─── MODEL QUALITY BADGE ───────────────────────────────────────── */
+.model-badge { font-size:10px; font-weight:700; border-radius:10px; padding:2px 7px; white-space:nowrap; cursor:default; }
+.model-elo  { background:rgba(63,185,80,.15); color:#3fb950; border:1px solid rgba(63,185,80,.3); }
+.model-odds { background:rgba(251,188,4,.12); color:#fbc004; border:1px solid rgba(251,188,4,.3); }
+html.light .model-elo  { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+html.light .model-odds { background:#fef9c3; color:#854d0e; border-color:#fde68a; }
+
+/* ─── REAL / EST EDGE ───────────────────────────────────────────── */
+.real-edge-badge { font-size:10px; font-weight:700; border-radius:10px; padding:2px 8px; background:rgba(63,185,80,.15); color:#3fb950; border:1px solid rgba(63,185,80,.3); white-space:nowrap; }
+.est-edge-badge  { font-size:10px; font-weight:700; border-radius:10px; padding:2px 8px; background:rgba(251,188,4,.12); color:#fbc004; border:1px solid rgba(251,188,4,.3); white-space:nowrap; }
+html.light .real-edge-badge { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+html.light .est-edge-badge  { background:#fef9c3; color:#854d0e; border-color:#fde68a; }
