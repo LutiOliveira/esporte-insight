@@ -113,3 +113,46 @@ def elo_to_goal_lambda(
 def has_elo_for_game(home_team: str, away_team: str) -> bool:
     """True se ambos os times têm rating Elo (jogo tem modelo independente)."""
     return home_team in ELO_RATINGS and away_team in ELO_RATINGS
+
+
+def compute_confidence_score(home_team: str, away_team: str) -> dict:
+    """
+    Retorna score de confiança (0-100) para a projeção do confronto.
+
+    Lógica:
+    - Modelo odds_derived → base 40 (circular, pouco confiável)
+    - Modelo Elo → base 60 + bônus por diferença de ratings
+      Diferença ≥ 300 pts → score 100 (resultado muito previsível)
+      Diferença = 0 → score 60 (confronto equilibrado, incerteza alta)
+    """
+    elo_home = get_elo(home_team)
+    elo_away = get_elo(away_team)
+    if elo_home is None or elo_away is None:
+        return {
+            "score": 40,
+            "label": "Baixa",
+            "model": "odds_derived",
+            "elo_home": None,
+            "elo_away": None,
+            "elo_diff": None,
+        }
+
+    diff = abs(elo_home - elo_away)
+    score = min(100, int(60 + diff / 300 * 40))
+    if score >= 85:
+        label = "Alta"
+    elif score >= 70:
+        label = "Média-Alta"
+    elif score >= 60:
+        label = "Média"
+    else:
+        label = "Baixa"
+
+    return {
+        "score": score,
+        "label": label,
+        "model": "elo",
+        "elo_home": elo_home,
+        "elo_away": elo_away,
+        "elo_diff": elo_home - elo_away,
+    }

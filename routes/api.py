@@ -8,6 +8,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 def _game_dict(game):
     """Serializa jogo com value bets incluídos."""
     from services.value_bet_service import analyze_game, get_affiliate_link, compute_ou_probs
+    from services.elo_service import compute_confidence_score
     d = game.to_dict()
     d["value_bets"] = analyze_game(game)
     # Adiciona affiliate link a cada odd
@@ -21,6 +22,9 @@ def _game_dict(game):
         d["btts_yes"] = round(proj.btts_yes * 100, 1) if proj.btts_yes else None
         d["btts_no"]  = round(proj.btts_no * 100, 1) if proj.btts_no else None
         d["model_type"] = proj.model_type or "odds_derived"
+
+    # Score de confiança do modelo
+    d["confidence"] = compute_confidence_score(game.home_team, game.away_team)
 
     return d
 
@@ -297,3 +301,54 @@ def reset_live():
             g.status = "upcoming"; g.home_score = None; g.away_score = None; g.minute = None
     db.session.commit()
     return jsonify({"status": "ok"})
+
+
+@api_bp.get("/accuracy/by-range")
+def accuracy_by_range():
+    """Precisão agrupada por faixa de probabilidade do modelo."""
+    from services.accuracy_service import get_accuracy_by_prob_range
+    return jsonify(get_accuracy_by_prob_range())
+
+
+@api_bp.get("/accuracy/calibration")
+def accuracy_calibration():
+    """Curva de calibração: probabilidade do modelo vs frequência real."""
+    from services.accuracy_service import get_calibration_data
+    return jsonify(get_calibration_data())
+
+
+@api_bp.get("/confidence/<game_id>")
+def game_confidence(game_id):
+    """Score de confiança da projeção para um jogo específico."""
+    from services.elo_service import compute_confidence_score
+    game = Game.query.get_or_404(game_id)
+    return jsonify(compute_confidence_score(game.home_team, game.away_team))
+
+
+@api_bp.get("/stats/summary")
+def stats_summary():
+    """Resumo geral do sistema: jogos, value bets, acurácia."""
+    from services.accuracy_service import get_accuracy_stats
+    from services.value_bet_service import analyze_game
+    from models import Game
+
+    total_games = Game.query.filter(Game.status.in_(["upcoming", "live"])).count()
+    live_games = Game.query.filter(Game.status == "live").count()
+    finished_games = Game.query.filter(Game.status == "finished").count()
+
+    games_with_odds = Game.query.filter(
+        Game.status.in_(["upcoming", "live"])
+    ).all()
+    vb_count = sum(1 for g in games_with_odds if analyze_game(g))
+    elo_games = sum(1 for g in games_with_odds if g.projection and g.projection.model_type == "elo")
+
+    accuracy = get_accuracy_stats()
+
+    return jsonify({
+        "upcoming_games": total_games,
+        "live_games": live_games,
+        "finished_games": finished_games,
+        "games_with_value_bets": vb_count,
+        "elo_model_games": elo_games,
+        "accuracy": accuracy,
+    })

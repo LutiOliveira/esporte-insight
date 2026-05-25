@@ -64,3 +64,80 @@ def get_accuracy_stats() -> dict:
         "pending": pending,
         "accuracy": round((correct / total * 100), 1) if total > 0 else None,
     }
+
+
+def get_accuracy_by_prob_range() -> list[dict]:
+    """
+    Agrupa predições resolvidas por faixa de probabilidade do modelo.
+    Útil para verificar calibração: times com 70% de confiança devem acertar ~70%.
+    """
+    preds = Prediction.query.filter(Prediction.actual_outcome.isnot(None)).all()
+
+    buckets = {
+        "50-60%": {"total": 0, "correct": 0, "min": 0.50, "max": 0.60},
+        "60-70%": {"total": 0, "correct": 0, "min": 0.60, "max": 0.70},
+        "70-80%": {"total": 0, "correct": 0, "min": 0.70, "max": 0.80},
+        "80%+":   {"total": 0, "correct": 0, "min": 0.80, "max": 1.01},
+    }
+
+    for pred in preds:
+        if pred.predicted_outcome == "home":
+            p = pred.home_win_prob
+        elif pred.predicted_outcome == "draw":
+            p = pred.draw_prob
+        else:
+            p = pred.away_win_prob
+
+        for name, bk in buckets.items():
+            if bk["min"] <= p < bk["max"]:
+                bk["total"] += 1
+                if pred.correct:
+                    bk["correct"] += 1
+                break
+
+    result = []
+    for name, bk in buckets.items():
+        acc = round(bk["correct"] / bk["total"] * 100, 1) if bk["total"] > 0 else None
+        result.append({
+            "range": name,
+            "total": bk["total"],
+            "correct": bk["correct"],
+            "accuracy": acc,
+        })
+    return result
+
+
+def get_calibration_data() -> list[dict]:
+    """
+    Curva de calibração: probabilidade do modelo vs frequência real de acertos.
+    Retorna pontos agrupados em decis (0-10%, 10-20%, …, 90-100%).
+    """
+    preds = Prediction.query.filter(Prediction.actual_outcome.isnot(None)).all()
+
+    buckets = {i: {"total": 0, "correct": 0} for i in range(10)}
+
+    for pred in preds:
+        if pred.predicted_outcome == "home":
+            p = pred.home_win_prob
+        elif pred.predicted_outcome == "draw":
+            p = pred.draw_prob
+        else:
+            p = pred.away_win_prob
+
+        idx = min(9, int(p * 10))
+        buckets[idx]["total"] += 1
+        if pred.correct:
+            buckets[idx]["correct"] += 1
+
+    result = []
+    for i, data in sorted(buckets.items()):
+        low = i * 10
+        high = low + 10
+        freq = round(data["correct"] / data["total"], 3) if data["total"] > 0 else None
+        result.append({
+            "bucket": f"{low}-{high}%",
+            "mid_prob": low + 5,
+            "total": data["total"],
+            "frequency": freq,
+        })
+    return result

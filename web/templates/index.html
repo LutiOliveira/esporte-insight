@@ -38,6 +38,7 @@
     <button class="nav-tab"        onclick="switchTab('valor')"       id="tab-valor">💎 Apostas de Valor</button>
     <button class="nav-tab"        onclick="switchTab('simulador')"   id="tab-simulador">🎮 Simulador</button>
     <button class="nav-tab"        onclick="switchTab('ranking')"     id="tab-ranking">🏆 Ranking</button>
+    <button class="nav-tab"        onclick="switchTab('analytics')"   id="tab-analytics">📈 Analytics</button>
   </div>
 
   <!-- Filtros (só na aba Jogos) -->
@@ -136,6 +137,13 @@
   <div id="view-ranking" style="display:none">
     <div id="ranking-content">
       <div class="loading"><span class="spinner"></span> Carregando ranking...</div>
+    </div>
+  </div>
+
+  <!-- Aba: Analytics -->
+  <div id="view-analytics" style="display:none">
+    <div id="analytics-content">
+      <div class="loading"><span class="spinner"></span> Carregando analytics...</div>
     </div>
   </div>
 </main>

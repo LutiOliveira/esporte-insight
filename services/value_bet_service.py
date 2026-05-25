@@ -9,6 +9,14 @@ import math as _math
 
 MIN_EDGE = 0.05
 
+# Limite máximo de Kelly por tipo de mercado (gestão de risco)
+KELLY_CAPS: dict[str, float] = {
+    "1x2":  0.20,   # 1X2 — mercado mais líquido
+    "ou":   0.12,   # Over/Under — incerteza maior
+    "btts": 0.08,   # Ambos marcam — mercado menor
+    "cs":   0.05,   # Placar correto — alta variância
+}
+
 AFFILIATE_LINKS = {
     "Betano":       "https://record.betano.com/sign-up?affid=SEU_ID",
     "Bet365":       "https://www.bet365.com",
@@ -37,12 +45,16 @@ def get_affiliate_link(bookmaker: str) -> str:
     return AFFILIATE_LINKS.get(bookmaker, "#")
 
 
-def _kelly(model_prob: float, odd: float) -> tuple[float, float]:
-    """Retorna (full_kelly_pct, quarter_kelly_pct) como percentual 0-100."""
+def _kelly(model_prob: float, odd: float, market_type: str = "1x2") -> tuple[float, float]:
+    """
+    Retorna (full_kelly_pct, quarter_kelly_pct) como percentual 0-100.
+    Aplica teto diferenciado por tipo de mercado (KELLY_CAPS).
+    """
     if odd <= 1.0 or model_prob <= 0:
         return 0.0, 0.0
     k = (model_prob * odd - 1) / (odd - 1)
-    k = max(0.0, min(k, 0.25))
+    cap = KELLY_CAPS.get(market_type, 0.20)
+    k = max(0.0, min(k, cap))
     return round(k * 100, 1), round(k * 25, 1)
 
 
@@ -98,7 +110,7 @@ def analyze_game(game) -> list[dict]:
         implied = 1 / best_odd
         edge = model_prob - implied
         if edge >= MIN_EDGE:
-            fk, qk = _kelly(model_prob, best_odd)
+            fk, qk = _kelly(model_prob, best_odd, "1x2")
             results.append({
                 "outcome": key, "label": labels[key],
                 "market_type": "1x2",
@@ -132,7 +144,7 @@ def analyze_game(game) -> list[dict]:
                 continue
             ou_key = f"{side}_{ot.line}"
             if ou_key not in seen_ou or edge > seen_ou[ou_key]["edge"]:
-                fk, qk = _kelly(model_prob, price)
+                fk, qk = _kelly(model_prob, price, "ou")
                 seen_ou[ou_key] = {
                     "outcome": ou_key,
                     "label": f"{'Over' if side == 'over' else 'Under'} {ot.line} gols",

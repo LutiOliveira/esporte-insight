@@ -157,7 +157,7 @@ function checkUpcomingGameNotifications(games) {
 }
 
 // ─── TABS ─────────────────────────────────────────────────────────
-const ALL_TABS = ["jogos", "grupos", "chaveamento", "valor", "simulador", "ranking"];
+const ALL_TABS = ["jogos", "grupos", "chaveamento", "valor", "simulador", "ranking", "analytics"];
 
 function switchTab(tab) {
   state.activeTab = tab;
@@ -171,6 +171,7 @@ function switchTab(tab) {
   if (tab === "valor") { initBankroll(); renderValueBets(); loadTipDay(); }
   if (tab === "simulador") renderSimulator();
   if (tab === "ranking") loadRanking();
+  if (tab === "analytics") loadAnalytics();
 }
 
 // ─── BARRA AO VIVO ────────────────────────────────────────────────
@@ -397,6 +398,12 @@ function renderGame(game) {
   const modelBadge = game.model_type === "elo"
     ? `<span class="model-badge model-elo" title="Modelo Elo independente — edge real">🎯 Elo</span>`
     : `<span class="model-badge model-odds" title="Modelo derivado das odds — edge estimado">📊 Est.</span>`;
+  const conf = game.confidence;
+  const confBadge = conf ? (() => {
+    const s = conf.score;
+    const cls = s >= 85 ? "conf-high" : s >= 70 ? "conf-med" : s >= 60 ? "conf-low" : "conf-vlow";
+    return `<span class="conf-badge ${cls}" title="Confiança do modelo: ${conf.label} (${s}/100)">🔮 ${conf.label}</span>`;
+  })() : "";
   const hf = flag(game.home_team);
   const af = flag(game.away_team);
 
@@ -404,7 +411,7 @@ function renderGame(game) {
     <div class="game-card" style="${isLive ? "border-color:rgba(248,81,73,.5);" : hasValue ? "border-color:rgba(63,185,80,.4);" : ""}">
       <div class="game-header">
         <div class="game-header-left">
-          <span class="game-tournament">${game.tournament} ${groupLabel}${valueBadge}${topEdgeBadge}${modelBadge}</span>
+          <span class="game-tournament">${game.tournament} ${groupLabel}${valueBadge}${topEdgeBadge}${modelBadge}${confBadge}</span>
         </div>
         <span class="game-time">${formatDateTime(game.start_time)}</span>
       </div>
@@ -507,6 +514,137 @@ async function loadTipDay() {
   } catch {
     container.innerHTML = "";
   }
+}
+
+// ─── MONTE CARLO ─────────────────────────────────────────────────
+let _simTab = "tracker"; // "tracker" | "montecarlo"
+
+function switchSimTab(tab) {
+  _simTab = tab;
+  renderSimulator();
+}
+
+function runMonteCarlo() {
+  const startBankroll = parseFloat(document.getElementById("mc-bankroll")?.value || "1000");
+  const betPct = parseFloat(document.getElementById("mc-bet-pct")?.value || "3") / 100;
+  const winRate = parseFloat(document.getElementById("mc-winrate")?.value || "52") / 100;
+  const avgOdd = parseFloat(document.getElementById("mc-avg-odd")?.value || "2.10");
+  const weeks = parseInt(document.getElementById("mc-weeks")?.value || "20", 10);
+  const betsPerWeek = parseInt(document.getElementById("mc-bets-week")?.value || "3", 10);
+
+  const N_SIM = 2000;
+  const N_BETS = weeks * betsPerWeek;
+
+  // Simula N_SIM trajetórias
+  const allPaths = [];
+  for (let s = 0; s < N_SIM; s++) {
+    let bal = startBankroll;
+    const path = [bal];
+    for (let b = 0; b < N_BETS; b++) {
+      const stake = bal * betPct;
+      if (Math.random() < winRate) {
+        bal += stake * (avgOdd - 1);
+      } else {
+        bal -= stake;
+      }
+      bal = Math.max(0, bal);
+      path.push(bal);
+    }
+    allPaths.push(path);
+  }
+
+  // Calcula percentis para cada passo
+  const finalVals = allPaths.map(p => p[N_BETS]);
+  finalVals.sort((a, b) => a - b);
+
+  const p5  = finalVals[Math.floor(N_SIM * 0.05)];
+  const p25 = finalVals[Math.floor(N_SIM * 0.25)];
+  const p50 = finalVals[Math.floor(N_SIM * 0.50)];
+  const p75 = finalVals[Math.floor(N_SIM * 0.75)];
+  const p95 = finalVals[Math.floor(N_SIM * 0.95)];
+
+  const ruinCount = finalVals.filter(v => v < startBankroll * 0.1).length;
+  const doubleCount = finalVals.filter(v => v >= startBankroll * 2).length;
+
+  // Seleciona 5 trajetórias representativas: p5, p25, p50, p75, p95
+  function findRepPath(target) {
+    return allPaths.reduce((best, path) => {
+      return Math.abs(path[N_BETS] - target) < Math.abs(best[N_BETS] - target) ? path : best;
+    });
+  }
+  const paths = [
+    { path: findRepPath(p5),  color: "#f85149", label: "P5 (pior 5%)" },
+    { path: findRepPath(p25), color: "#e3b341", label: "P25" },
+    { path: findRepPath(p50), color: "#58a6ff", label: "Mediana" },
+    { path: findRepPath(p75), color: "#3fb950", label: "P75" },
+    { path: findRepPath(p95), color: "#a5d6ff", label: "P95 (melhor 5%)" },
+  ];
+
+  // Renderiza SVG
+  const W = 560, H = 200;
+  const maxVal = Math.max(...paths.flatMap(p => p.path)) * 1.05;
+  const minVal = 0;
+
+  function toX(i) { return (i / N_BETS) * (W - 40) + 20; }
+  function toY(v) { return H - 20 - ((v - minVal) / (maxVal - minVal)) * (H - 30); }
+
+  const polylines = paths.map(({ path, color, label }) => {
+    const pts = path.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+    return `<polyline fill="none" stroke="${color}" stroke-width="1.5" stroke-opacity="0.85" points="${pts}"/>`;
+  }).join("");
+
+  // Eixo horizontal (semanas)
+  const xLabels = [];
+  for (let w = 0; w <= weeks; w += Math.max(1, Math.floor(weeks / 5))) {
+    const i = w * betsPerWeek;
+    xLabels.push(`<text x="${toX(i).toFixed(1)}" y="${H - 4}" fill="var(--text-muted)" font-size="9" text-anchor="middle">${w}s</text>`);
+  }
+
+  // Linha de banca inicial
+  const y0 = toY(startBankroll).toFixed(1);
+  const baselineSvg = `<line x1="20" y1="${y0}" x2="${W - 20}" y2="${y0}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,3"/>`;
+
+  const svg = `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+      ${baselineSvg}
+      ${polylines}
+      ${xLabels.join("")}
+    </svg>`;
+
+  // Legenda
+  const legend = paths.map(p => `
+    <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
+      <div style="width:16px;height:3px;background:${p.color};border-radius:2px;"></div>
+      <span style="color:var(--text-muted)">${p.label}: <strong style="color:${p.color}">R$ ${findRepPath(p === paths[0] ? p5 : p === paths[1] ? p25 : p === paths[2] ? p50 : p === paths[3] ? p75 : p95)[N_BETS].toFixed(0)}</strong></span>
+    </div>`).join("");
+
+  const resultEl = document.getElementById("mc-result");
+  if (resultEl) resultEl.innerHTML = `
+    <div class="mc-chart-wrap">
+      ${svg}
+      <div class="mc-legend">${legend}</div>
+    </div>
+    <div class="mc-stats-grid">
+      <div class="mc-stat">
+        <div class="mc-stat-value" style="color:#3fb950">R$ ${p50.toFixed(0)}</div>
+        <div class="mc-stat-label">Mediana (${weeks}sem)</div>
+      </div>
+      <div class="mc-stat">
+        <div class="mc-stat-value" style="color:#f85149">${(ruinCount / N_SIM * 100).toFixed(1)}%</div>
+        <div class="mc-stat-label">Risco de ruína (&lt;10%)</div>
+      </div>
+      <div class="mc-stat">
+        <div class="mc-stat-value" style="color:#58a6ff">${(doubleCount / N_SIM * 100).toFixed(1)}%</div>
+        <div class="mc-stat-label">Prob. dobrar banca</div>
+      </div>
+      <div class="mc-stat">
+        <div class="mc-stat-value">R$ ${p5.toFixed(0)} – R$ ${p95.toFixed(0)}</div>
+        <div class="mc-stat-label">Intervalo P5–P95</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">
+      ${N_SIM.toLocaleString()} simulações · ${N_BETS} apostas (${weeks} semanas × ${betsPerWeek}/sem)
+    </div>`;
 }
 
 // ─── SIMULADOR ────────────────────────────────────────────────────
@@ -628,8 +766,57 @@ function renderSimulator() {
       </div>
     </div>`;
 
+  const mcPanel = `
+    <div class="simulator-panel">
+      <div class="sim-subtabs">
+        <button class="sim-subtab" onclick="switchSimTab('tracker')">📊 Tracker</button>
+        <button class="sim-subtab active" onclick="switchSimTab('montecarlo')">🎲 Monte Carlo</button>
+      </div>
+      <div class="mc-panel">
+        <div class="mc-title">🎲 Simulação Monte Carlo — Projeção de Banca</div>
+        <div class="mc-subtitle">Simule 2.000 trajetórias com sua estratégia para ver o leque de resultados possíveis</div>
+        <div class="mc-inputs">
+          <div class="mc-input-group">
+            <label>Banca inicial (R$)</label>
+            <input type="number" id="mc-bankroll" value="1000" min="100" step="100">
+          </div>
+          <div class="mc-input-group">
+            <label>% da banca por aposta</label>
+            <input type="number" id="mc-bet-pct" value="3" min="0.5" max="25" step="0.5">
+          </div>
+          <div class="mc-input-group">
+            <label>Taxa de acerto (%)</label>
+            <input type="number" id="mc-winrate" value="52" min="30" max="80" step="1">
+          </div>
+          <div class="mc-input-group">
+            <label>Odd média</label>
+            <input type="number" id="mc-avg-odd" value="2.10" min="1.20" max="5" step="0.05">
+          </div>
+          <div class="mc-input-group">
+            <label>Semanas simuladas</label>
+            <input type="number" id="mc-weeks" value="20" min="4" max="52" step="4">
+          </div>
+          <div class="mc-input-group">
+            <label>Apostas por semana</label>
+            <input type="number" id="mc-bets-week" value="3" min="1" max="14" step="1">
+          </div>
+        </div>
+        <button class="btn-run-mc" onclick="runMonteCarlo()">▶ Simular agora</button>
+        <div id="mc-result"></div>
+      </div>
+    </div>`;
+
+  if (_simTab === "montecarlo") {
+    container.innerHTML = mcPanel;
+    return;
+  }
+
   container.innerHTML = `
     <div class="simulator-panel">
+      <div class="sim-subtabs">
+        <button class="sim-subtab active" onclick="switchSimTab('tracker')">📊 Tracker</button>
+        <button class="sim-subtab" onclick="switchSimTab('montecarlo')">🎲 Monte Carlo</button>
+      </div>
       <!-- Header -->
       <div class="simulator-header">
         <div>
@@ -898,6 +1085,150 @@ async function runCompare() {
   } catch (e) {
     result.innerHTML = `<div class="empty"><p>Erro ao comparar: ${e.message}</p></div>`;
   }
+}
+
+// ─── ANALYTICS ────────────────────────────────────────────────────
+async function loadAnalytics() {
+  const container = document.getElementById("analytics-content");
+  container.innerHTML = `<div class="loading"><span class="spinner"></span> Carregando analytics...</div>`;
+  try {
+    const [summary, byRange, calibration] = await Promise.all([
+      apiFetch("/api/stats/summary"),
+      apiFetch("/api/accuracy/by-range"),
+      apiFetch("/api/accuracy/calibration"),
+    ]);
+    renderAnalytics(summary, byRange, calibration);
+  } catch (e) {
+    container.innerHTML = `<div class="empty"><h3>Erro ao carregar analytics</h3><p>${e.message}</p></div>`;
+  }
+}
+
+function renderAnalytics(summary, byRange, calibration) {
+  const container = document.getElementById("analytics-content");
+  const acc = summary.accuracy;
+
+  // ── Cartões de resumo ──
+  const summaryCards = `
+    <div class="analytics-summary-grid">
+      <div class="analytics-card">
+        <div class="analytics-card-value">${summary.upcoming_games}</div>
+        <div class="analytics-card-label">Jogos Próximos</div>
+      </div>
+      <div class="analytics-card ${summary.live_games > 0 ? "card-live" : ""}">
+        <div class="analytics-card-value">${summary.live_games}</div>
+        <div class="analytics-card-label">Ao Vivo</div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-value">${summary.games_with_value_bets}</div>
+        <div class="analytics-card-label">Value Bets</div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-value">${summary.elo_model_games}</div>
+        <div class="analytics-card-label">Modelo Elo</div>
+      </div>
+      <div class="analytics-card ${acc.accuracy != null && acc.accuracy >= 60 ? "card-good" : ""}">
+        <div class="analytics-card-value">${acc.accuracy != null ? acc.accuracy + "%" : "—"}</div>
+        <div class="analytics-card-label">Assertividade</div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-value">${acc.correct}/${acc.total}</div>
+        <div class="analytics-card-label">Acertos/Total</div>
+      </div>
+    </div>`;
+
+  // ── Tabela por faixa de probabilidade ──
+  const hasRangeData = byRange.some(r => r.total > 0);
+  const rangeRows = byRange.map(r => {
+    const bar = r.accuracy != null ? `<div class="analytics-bar-wrap"><div class="analytics-bar-fill" style="width:${r.accuracy}%;background:${r.accuracy >= 70 ? "var(--green)" : r.accuracy >= 55 ? "var(--yellow)" : "var(--red)"}"></div></div>` : "";
+    return `<tr>
+      <td>${r.range}</td>
+      <td>${r.total}</td>
+      <td>${r.correct}</td>
+      <td>${r.accuracy != null ? r.accuracy + "%" : "—"}${bar}</td>
+    </tr>`;
+  }).join("");
+
+  const rangeTable = hasRangeData ? `
+    <div class="analytics-section">
+      <div class="analytics-section-title">📊 Precisão por Faixa de Probabilidade</div>
+      <div class="analytics-section-desc">Verifica se o modelo está calibrado: se o modelo diz 70%, deveria acertar ~70% das vezes.</div>
+      <table class="analytics-table">
+        <thead><tr><th>Faixa</th><th>Total</th><th>Acertos</th><th>Precisão</th></tr></thead>
+        <tbody>${rangeRows}</tbody>
+      </table>
+    </div>` : `
+    <div class="analytics-section">
+      <div class="analytics-section-title">📊 Precisão por Faixa de Probabilidade</div>
+      <div class="empty" style="padding:24px"><p>Sem predições resolvidas ainda. Aguarde jogos finalizados.</p></div>
+    </div>`;
+
+  // ── Curva de calibração SVG ──
+  const calWithData = calibration.filter(c => c.total > 0);
+  let calibrationSvg = "";
+  if (calWithData.length >= 3) {
+    const W = 320, H = 160;
+    const pad = 30;
+    function cx(prob) { return pad + (prob / 100) * (W - pad * 2); }
+    function cy(freq) { return H - pad - (freq * (H - pad * 2)); }
+
+    // Linha perfeita
+    const perfectLine = `<line x1="${cx(0)}" y1="${cy(0)}" x2="${cx(100)}" y2="${cy(1)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,3"/>`;
+
+    // Pontos do modelo (só buckets com dados)
+    const modelPoints = calWithData
+      .filter(c => c.frequency != null)
+      .map(c => `${cx(c.mid_prob).toFixed(1)},${cy(c.frequency).toFixed(1)}`)
+      .join(" ");
+
+    const polyline = modelPoints ? `<polyline fill="none" stroke="var(--blue)" stroke-width="2" points="${modelPoints}"/>` : "";
+    const dots = calWithData
+      .filter(c => c.frequency != null)
+      .map(c => `<circle cx="${cx(c.mid_prob).toFixed(1)}" cy="${cy(c.frequency).toFixed(1)}" r="4" fill="var(--blue)" stroke="var(--bg-card)" stroke-width="1"/>`)
+      .join("");
+
+    // Eixos
+    const xLabels = [0, 25, 50, 75, 100].map(v =>
+      `<text x="${cx(v)}" y="${H - 10}" fill="var(--text-muted)" font-size="9" text-anchor="middle">${v}%</text>`
+    ).join("");
+    const yLabels = [0, 25, 50, 75, 100].map(v =>
+      `<text x="6" y="${cy(v / 100).toFixed(1)}" fill="var(--text-muted)" font-size="9" dominant-baseline="middle">${v}</text>`
+    ).join("");
+
+    calibrationSvg = `
+      <div class="analytics-section">
+        <div class="analytics-section-title">🎯 Curva de Calibração</div>
+        <div class="analytics-section-desc">Linha tracejada = modelo perfeito. Azul = nosso modelo.</div>
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;display:block;margin:0 auto">
+          ${perfectLine}${polyline}${dots}${xLabels}${yLabels}
+        </svg>
+      </div>`;
+  }
+
+  // ── Informativo sobre modelos ──
+  const modelInfo = `
+    <div class="analytics-section">
+      <div class="analytics-section-title">🔍 Sobre os Modelos</div>
+      <div class="analytics-model-info">
+        <div class="model-info-item">
+          <span class="model-badge model-elo">🎯 Elo</span>
+          <div>
+            <strong>Modelo Elo (independente)</strong> — usado para jogos da Copa do Mundo 2026.
+            As probabilidades são calculadas a partir de ratings Elo das seleções, sem depender das odds do mercado.
+            O edge detectado aqui é <em>real</em> — há vantagem matemática genuína sobre as casas.
+          </div>
+        </div>
+        <div class="model-info-item" style="margin-top:12px">
+          <span class="model-badge model-odds">📊 Est.</span>
+          <div>
+            <strong>Modelo Derivado (odds)</strong> — usado para ligas sem ratings Elo.
+            As probabilidades são derivadas das próprias odds, criando circularidade.
+            O edge calculado é um <em>artefato matemático</em> — use com cautela.
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  container.innerHTML = summaryCards + rangeTable + (calibrationSvg || "") + modelInfo;
 }
 
 // ─── ACCURACY / QUOTA ─────────────────────────────────────────────
